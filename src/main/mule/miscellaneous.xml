@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="c13835c3-ed11-4a50-b2b1-67b1ee96acb7" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="b1b5596b-33d3-48d4-a991-a3d79afe1d33" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="Raghava$777" database="myfirstdb" />
+	</db:config>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="79933b2f-1bff-4661-901b-8a6d0ddb4871" />
+	<flow name="watermark_using_objectStore" doc:id="26c846ec-d33a-4c64-9d85-58fb151dcb24" >
+		<scheduler doc:name="Scheduler" doc:id="08540a27-03b7-462e-b530-64847652aafe" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="5000"/>
+			</scheduling-strategy>
+		</scheduler>
+		<ee:transform doc:name="explination" doc:id="6e2ef9be-db3d-4c6a-9944-af5faf39428c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+"keep fail_on_null_value--false by default it is true ,
+keep target variable and target value from advanced in RETRIEVE,
+the key shpuld be same in RETRIEVE nd STORE to achieve watermarking"]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<os:retrieve doc:name="Retrieve" doc:id="a9e414c4-58f9-4053-97bd-bf0563c8639d" key="sample" objectStore="Object_store" target="watermark">
+			<os:default-value ><![CDATA[400]]></os:default-value>
+		</os:retrieve>
+		<logger level="INFO" doc:name="Logger" doc:id="77d6336b-2868-4484-b30f-9b1a2fe8955b" message='"fetching::"  #[vars.watermark]' />
+		<db:select doc:name="Select" doc:id="3f680d63-dc3b-4793-9828-f6a04cd6f7e2" config-ref="Database_Config">
+			<db:sql ><![CDATA[select * from myfirstdb.studentdetails where std_id >:id]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{"id":vars.watermark}]]]></db:input-parameters>
+		</db:select>
+		<logger level="INFO" doc:name="Logger" doc:id="60343416-6bf0-4509-9afe-b747f2d92dab" message="#[%dw 2.0&#10;output application/json&#10;---&#10;payload]"/>
+		<os:store doc:name="Store" doc:id="cedcf0f5-221f-456b-81f9-26ad3edf967e" objectStore="Object_store" key="sample" failOnNullValue="false">
+			<os:value ><![CDATA[#[max(payload map $.std_id)]]]></os:value>
+		</os:store>
+	</flow>
+	<flow name="fetch_newly_added_rows" doc:id="3f4bf5a1-021a-4853-9f24-7878d71bad71" >
+		<db:listener doc:name="On Table Row" doc:id="86a3f8f9-75d1-4f50-a57c-9553df9f16c0" config-ref="Database_Config" table="studentdetails" watermarkColumn="std_id">
+			<scheduling-strategy >
+				<fixed-frequency frequency="5000"/>
+			</scheduling-strategy>
+		</db:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="be97cb8f-3d75-49a8-a1e7-62d1c016c682" message="#[payload]"/>
+	</flow>
+</mule>
